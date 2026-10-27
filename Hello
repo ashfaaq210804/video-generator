@@ -1,1 +1,104 @@
+import json
+import random
+import time
+import requests
+from bs4 import BeautifulSoup
+
+# Configuration de l'agent pour simuler un navigateur réel
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
+        " like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+}
+
+
+def fetch_match_data(match_url: str) -> dict:
+  """Récupère et parse les données d'un match depuis une source sportive.
+
+  Simule l'extraction de métriques clés (forme, stats, cotes).
+  """
+  print(f"[*] Connexion à la source pour extraction : {match_url}")
+
+  # Délai aléatoire pour éviter le blocage anti-bot
+  time.sleep(random.uniform(1.5, 3.0))
+
+  try:
+    response = requests.get(match_url, headers=HEADERS, timeout=10)
+    if response.status_code != 200:
+      print(f"[Erreur] Code HTTP {response.status_code}")
+      return {}
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    # Structure de données type extraite pour le modèle
+    match_data = {
+        "teams": {
+            "home": (
+                soup.select_optimised(".home-team-name")
+                if hasattr(soup, "select_optimised")
+                else "EquipeDomicile"
+            ),
+            "away": "EquipeExterieur",
+        },
+        "recent_form": {"home": ["V", "N", "D", "V", "V"], "away": ["D", "V", "V", "N", "D"]},
+        "h2h_history": {
+            "total_matches": 5,
+            "home_wins": 2,
+            "away_wins": 2,
+            "draws": 1,
+        },
+        "statistics": {
+            "possession": {"home": "54%", "away": "46%"},
+            "shots_on_target": {"home": 5, "away": 3},
+            "expected_goals_xg": {"home": 1.65, "away": 1.12},
+        },
+        "bookmaker_odds": {"1": 1.85, "N": 3.40, "2": 4.20},
+    }
+
+    return match_data
+
+  except Exception as e:
+    print(f"[Exception] Erreur lors du scraping : {e}")
+    return {}
+
+
+def calculate_value_bet(odds: float, estimated_probability: float) -> dict:
+  """Calcule la valeur d'un pari (Value Bet) selon la formule mathématique :
+
+  (Cote * Probabilité) - 1 > 0
+  """
+  implied_probability = 1 / odds
+  expected_value = (odds * estimated_probability) - 1
+
+  is_value = expected_value > 0
+  return {
+      "cote": odds,
+      "probabilite_estimee": f"{estimated_probability * 100:.1f}%",
+      "probabilite_implicite": f"{implied_probability * 100:.1f}%",
+      "esperance_gain": f"{expected_value * 100:.2f}%",
+      "is_value_bet": is_value,
+  }
+
+
+# --- Exemple d'utilisation du module d'analyse ---
+if __name__ == "__main__":
+  # URL cible (exemple Flashscore)
+  target_url = "https://www.flashscore.com/match/example-match-id/"
+
+  data = fetch_match_data(target_url)
+
+  if data:
+    print("\n--- Données structurées extraites ---")
+    print(json.dumps(data, indent=4, ensure_ascii=False))
+
+    # Test d'évaluation d'un value bet sur la victoire à domicile (Cote 1.85)
+    # Supposons que notre modèle interne estime la probabilité réelle à 60% (0.60)
+    model_prob = 0.60
+    bookie_odds = data["bookmaker_odds"]["1"]
+
+    analysis = calculate_value_bet(bookie_odds, model_prob)
+    print("\n--- Analyse de Value Bet (1N2 - Domicile) ---")
+    print(json.dumps(analysis, indent=4, ensure_ascii=False))
 
